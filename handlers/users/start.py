@@ -52,7 +52,7 @@ async def bot_start(message: types.Message):
             await bot.send_message(
                 message.from_user.id,
                 "Buyruqlar ro'yxati:\n/ask - Texnik yordamga habar yozish\n/change_language - Tilni o'zgartish\n/about - Centris Towers haqida bilish",
-                reply_markup=get_lang_for_button(message)
+                reply_markup=get_lang_for_button1(message)
             )
 
 @dp.message_handler(Command('send_image'), user_id=ADMIN_ID)

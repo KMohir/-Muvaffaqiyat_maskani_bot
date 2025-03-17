@@ -26,6 +26,29 @@ def get_lang_for_button(message):
         resize_keyboard=True
     )
     return button
+
+def get_lang_for_button1(message):
+    lang = db.get_lang(message.from_user.id)
+    button=ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="Takliflarni yuborish")
+
+            ],
+            [
+                KeyboardButton(text="Tilni o'zgartirish")
+            ],
+            [
+                KeyboardButton(text="Centris Towers bilan bog'lanish")
+            ],
+            [
+                KeyboardButton(text="Centris Towers haqida bilish")
+            ],
+
+        ],
+        resize_keyboard=True
+    )
+    return button
 # def get_project_for_user(message):
 #     lang = db.get_lang(message.from_user.id)
 #     button=ReplyKeyboardMarkup(
