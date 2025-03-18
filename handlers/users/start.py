@@ -1,23 +1,78 @@
-from aiogram import types
+import logging
+import asyncio
+from aiogram import Bot, Dispatcher, types, executor
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.builtin import CommandStart, Command
 from aiogram.types import ParseMode, Message, ReplyKeyboardRemove, MediaGroup
-import asyncio
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from db import Database, create_database  # Импортируем реальную базу данных
 
-from db import db
-from keyboards.default.reply import key, get_lang_for_button
-from keyboards.inline.support import langMenu, support_keyboard
-from loader import dp, bot
-from states.state import answer, RegistrationStates, questions
-from translation import _
+# Replace with your actual Telegram Bot Token
+BOT_TOKEN = "6528403005:AAEKDJJDu5S0H2QZrD_NmdV2LKvnDkxlzUk"
+ADMIN_ID = 5657091547  # Replace with your actual Admin ID
 
-# ID администратора
-ADMIN_ID = 5657091547  # Замените на реальный ID администратора
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-global lang
+# Initialize bot and dispatcher
+bot = Bot(token=BOT_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
+# Создаем БД, если она не существует
+create_database('databaseprotestim.db')
+# Используем реальную базу данных вместо MockDB
+db = Database('databaseprotestim.db')
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize bot and dispatcher
+bot = Bot(token=BOT_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+
+# Mock database implementation (replace with your actual database logic)
+
+
+# Translation function (mock implementation)
+def _(text, lang):
+    return text  # Replace with actual translation logic if needed
+
+# Keyboards
+def get_lang_for_button(message):
+    return types.ReplyKeyboardMarkup(resize_keyboard=True).add("Support", "About")
+
+def key(lang):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if lang == "uz":
+        keyboard.add("Kontaktni yuborish")
+    elif lang == "ru":
+        keyboard.add("Отправить контакт")
+    return keyboard
+
+langMenu = types.InlineKeyboardMarkup(row_width=2)
+langMenu.add(
+    types.InlineKeyboardButton("🇺🇿 O'zbek", callback_data="lang_uz"),
+    types.InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru")
+)
+
+# States
+class RegistrationStates:
+    lang = "lang"
+    name = "name"
+    address = "address"
+    status = "status"
+    custom_status = "custom_status"
+    employees = "employees"
+    phone = "phone"
+
+# Start command
 @dp.message_handler(CommandStart())
 async def bot_start(message: types.Message):
+    logger.info(f"User {message.from_user.id} started the bot")
     if not db.user_exists(message.from_user.id):
         await bot.send_message(
             message.from_user.id,
@@ -32,13 +87,10 @@ async def bot_start(message: types.Message):
     else:
         try:
             lang = db.get_lang(message.from_user.id)
-            video_path = 'Centris.mp4'
-            try:
-                caption = (
-                    _("Centris Tower - innovatsiya va zamonaviy uslub gullab-yashnaydigan yangi avlod biznes markazi\n\nMuvaffaqiyatli biznesingizning kaliti bo'ladigan hashamatli ish joyingizni kashf eting.",
-                      lang))
-            except Exception as e:
-                caption = "Centris Tower - innovatsiya va zamonaviy uslub gullab-yashnaydigan yangi avlod biznes markazi\n\nMuvaffaqiyatli biznesingizning kaliti bo'ladigan hashamatli ish joyingizni kashf eting."
+            video_path = 'Centris.mp4'  # Ensure this file exists
+            caption = (
+                _("Centris Tower - innovatsiya va zamonaviy uslub gullab-yashnaydigan yangi avlod biznes markazi\n\nMuvaffaqiyatli biznesingizning kaliti bo'ladigan hashamatli ish joyingizni kashf eting.", lang)
+            )
             with open(video_path, 'rb') as video:
                 await bot.send_video(
                     chat_id=message.chat.id,
@@ -47,14 +99,15 @@ async def bot_start(message: types.Message):
                     supports_streaming=True,
                     reply_markup=get_lang_for_button(message)
                 )
-        except Exception as exx:
-            print(exx)
+        except Exception as e:
+            logger.error(f"Error sending video to {message.from_user.id}: {e}")
             await bot.send_message(
                 message.from_user.id,
                 "Buyruqlar ro'yxati:\n/ask - Texnik yordamga habar yozish\n/change_language - Tilni o'zgartish\n/about - Centris Towers haqida bilish",
-                reply_markup=get_lang_for_button1(message)
+                reply_markup=get_lang_for_button(message)
             )
 
+# Send image command (Admin only)
 @dp.message_handler(Command('send_image'), user_id=ADMIN_ID)
 async def send_image_command(message: types.Message, state: FSMContext):
     await message.answer(
@@ -96,7 +149,7 @@ async def finish_image_collection(message: types.Message, state: FSMContext):
     await message.answer(f"Jami {total_images} ta rasm qabul qilindi. Jo'natish boshlanadi...")
 
     users = db.get_all_users()
-    print(f"Topilgan foydalanuvchilar: {len(users)}")
+    logger.info(f"Found {len(users)} users to send images to")
 
     chunk_size = 10
     image_chunks = [images[i:i + chunk_size] for i in range(0, len(images), chunk_size)]
@@ -114,10 +167,10 @@ async def finish_image_collection(message: types.Message, state: FSMContext):
                     else:
                         media_group.attach_photo(file_id)
                 await bot.send_media_group(chat_id=user_id, media=media_group)
-                await asyncio.sleep(1)
+                await asyncio.sleep(1)  # Rate limiting
             sent_count += 1
         except Exception as e:
-            print(f"Media guruhini foydalanuvchiga yuborish mumkin emas {user_id}: {e}")
+            logger.error(f"Failed to send media group to user {user_id}: {e}")
             continue
 
     await message.answer(f"{total_images} ta rasmdan media guruhlar {sent_count} foydalanuvchilarga muvaffaqiyatli yuborildi!")
@@ -128,6 +181,7 @@ async def invalid_input(message: types.Message, state: FSMContext):
     await message.answer("Iltimos, rasm yuboring yoki /done buyrug'i bilan kirishni yakunlang.")
     await state.set_state("waiting_for_images")
 
+# Registration process
 @dp.callback_query_handler(text_contains="lang_", state=RegistrationStates.lang)
 async def set_lang(call: types.CallbackQuery, state: FSMContext):
     await call.answer()
@@ -258,51 +312,49 @@ async def process_phone_contact(message: Message, state: FSMContext):
     await save_user_data(message, state, contact)
 
 async def save_user_data(message: Message, state: FSMContext, contact: str):
-    async with state.proxy() as data:
-        lang = data.get('lang')
-        name = data.get('name')
-        address = data.get('address')
-        status = data.get('status')
-        employees = data.get('employees')
+    try:
+        async with state.proxy() as data:
+            lang = data.get('lang')
+            name = data.get('name')
+            address = data.get('address')
+            status = data.get('status')
+            employees = data.get('employees')
 
-        db.update(lang, message.from_user.id, name, contact, address=address, status=status, employees=employees)
+            db.update(lang, message.from_user.id, name, contact, address=address, status=status, employees=employees)
 
-        await message.answer(_("Ro'yxatdan muvaffaqiyatli o'tdingiz!", lang), reply_markup=ReplyKeyboardRemove())
+            await message.answer(_("Ro'yxatdan muvaffaqiyatli o'tdingiz!", lang), reply_markup=ReplyKeyboardRemove())
 
-        video_path = 'Centris.mp4'
-        try:
+            video_path = 'Centris.mp4'  # Ensure this file exists
             caption = (
-                _("Centris Tower - innovatsiya va zamonaviy uslub gullab-yashnaydigan yangi avlod biznes markazi\n\nMuvaffaqiyatli biznesingizning kaliti bo'ladigan hashamatli ish joyingizni kashf eting.",
-                  lang))
-        except Exception as e:
-            caption = "Centris Tower - innovatsiya va zamonaviy uslub gullab-yashnaydigan yangi avlod biznes markazi\n\nMuvaffaqiyatli biznesingizning kaliti bo'ladigan hashamatli ish joyingizni kashf eting."
-
-        with open(video_path, 'rb') as video:
-            await bot.send_video(
-                chat_id=message.chat.id,
-                video=video,
-                caption='',
-                supports_streaming=True,
-                reply_markup=get_lang_for_button(message)
+                _("Centris Tower - innovatsiya va zamonaviy uslub gullab-yashnaydigan yangi avlod biznes markazi\n\nMuvaffaqiyatli biznesingizning kaliti bo'ladigan hashamatli ish joyingizni kashf eting.", lang)
             )
+            with open(video_path, 'rb') as video:
+                await bot.send_video(
+                    chat_id=message.chat.id,
+                    video=video,
+                    caption='',
+                    supports_streaming=True,
+                    reply_markup=get_lang_for_button(message)
+                )
+    except Exception as e:
+        logger.error(f"Error saving user data for {message.from_user.id}: {e}")
+        await message.answer("Произошла ошибка при регистрации. Пожалуйста, попробуйте снова.")
+    finally:
+        await state.finish()
 
-    await state.finish()
-
-# Новый обработчик команды /get_all_users
+# Get all users command (Admin only)
 @dp.message_handler(commands=['get_all_users'], user_id=ADMIN_ID)
 async def get_all_users_command(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.reply("Sizda bu buyruqni bajarish uchun ruxsat yo'q.")
         return
 
-    # Получаем все данные пользователей
     users_data = db.get_all_users_data()
 
     if not users_data:
         await message.reply("Foydalanuvchilar bazada mavjud emas.")
         return
 
-    # Формируем ответное сообщение
     response = "Foydalanuvchilar ro'yxati:\n\n"
     for user in users_data:
         user_id, lang, name, phone, address, status, employees = user
@@ -317,10 +369,12 @@ async def get_all_users_command(message: types.Message):
             "------------------------\n"
         )
 
-    # Проверяем длину сообщения (Telegram имеет ограничение в 4096 символов)
     if len(response) > 4096:
-        # Разбиваем сообщение на части
         for i in range(0, len(response), 4096):
             await message.reply(response[i:i + 4096])
     else:
         await message.reply(response)
+
+# Main execution
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
